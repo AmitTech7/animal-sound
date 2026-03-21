@@ -1,0 +1,5 @@
+{
+  "name": "Animal Sound Explorer",
+  "description": "A voice-interactive chatbot that plays real animal sounds on command. Speak to the bot to hear roars, chirps, and more.",
+  "requestFramePermissions": ["microphone"]
+}
