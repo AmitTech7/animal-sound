@@ -7,7 +7,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { GoogleGenAI, Modality, Type } from "@google/genai";
 import { motion, AnimatePresence } from "motion/react";
 import { Mic, MicOff, Volume2, VolumeX, Play, Pause, Info, X, Music, Sparkles, Shuffle } from "lucide-react";
-import { ANIMAL_SOUNDS, AnimalSound } from "./constants";
+import { ANIMAL_SOUNDS, AnimalSound, HINDI_MAPPING } from "./constants";
 
 // --- Types ---
 
@@ -36,6 +36,7 @@ export default function App() {
   const audioQueueRef = useRef<Float32Array[]>([]);
   const isPlayingRef = useRef(false);
   const animalAudioRef = useRef<HTMLAudioElement | null>(null);
+  const lastPlayedRef = useRef<{ name: string; time: number } | null>(null);
 
   // --- Audio Handling ---
 
@@ -163,6 +164,7 @@ export default function App() {
           Respond in the language the user is using (English or Hindi).
           Available animals: ${ANIMAL_SOUNDS.filter(a => a.category === 'animal').map(a => a.name).join(", ")}.
           Available birds: ${ANIMAL_SOUNDS.filter(a => a.category === 'bird').map(a => a.name).join(", ")}.`,
+          inputAudioTranscription: {},
           tools: [{
             functionDeclarations: [
               {
@@ -226,6 +228,35 @@ export default function App() {
             startMic();
           },
           onmessage: async (message) => {
+            // Instant playback based on transcription
+            if ((message.serverContent as any)?.userTurn?.parts) {
+              for (const part of (message.serverContent as any).userTurn.parts) {
+                if (part.text) {
+                  const text = part.text.toLowerCase();
+                  console.log("User transcription:", text);
+                  
+                  // Check for animal names in transcription
+                  for (const animal of ANIMAL_SOUNDS) {
+                    const englishName = animal.name.toLowerCase();
+                    const hindiName = Object.keys(HINDI_MAPPING).find(key => HINDI_MAPPING[key] === animal.name)?.toLowerCase();
+                    
+                    if (text.includes(englishName) || (hindiName && text.includes(hindiName))) {
+                      // Avoid double triggers (debounce)
+                      const now = Date.now();
+                      if (lastPlayedRef.current?.name === animal.name && now - lastPlayedRef.current.time < 3000) {
+                        continue;
+                      }
+                      
+                      console.log("Instant match found:", animal.name);
+                      handleAnimalSound(animal.name);
+                      lastPlayedRef.current = { name: animal.name, time: now };
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+
             if (message.serverContent?.modelTurn?.parts) {
               for (const part of message.serverContent.modelTurn.parts) {
                 if (part.inlineData?.data) {
@@ -251,7 +282,17 @@ export default function App() {
             if (message.toolCall) {
               const responses = message.toolCall.functionCalls.map(call => {
                 if (call.name === "playAnimalSound") {
-                  const result = handleAnimalSound(call.args.animalName as string);
+                  const animalName = call.args.animalName as string;
+                  const now = Date.now();
+                  
+                  // If we already played this animal via transcription recently, don't play again
+                  if (lastPlayedRef.current?.name.toLowerCase() === animalName.toLowerCase() && now - lastPlayedRef.current.time < 5000) {
+                    console.log("Skipping tool call playback, already played via transcription:", animalName);
+                    return { name: call.name, response: { success: true, alreadyPlayed: true }, id: call.id };
+                  }
+                  
+                  const result = handleAnimalSound(animalName);
+                  lastPlayedRef.current = { name: animalName, time: now };
                   return { name: call.name, response: result, id: call.id };
                 }
                 if (call.name === "playCategorySequence") {

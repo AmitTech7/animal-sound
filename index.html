@@ -3,7 +3,46 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
+    <title>Animal Explorer</title>
+    <script>
+      // Fix for "Cannot set property fetch of #<Window> which has only a getter"
+      // and other Node-like environment expectations.
+      (function() {
+        if (typeof window !== 'undefined') {
+          window.global = window;
+          window.process = { env: {} };
+          
+          try {
+            var currentFetch = window.fetch;
+            var props = {
+              get: function() { return currentFetch; },
+              set: function(v) { 
+                currentFetch = v; 
+              },
+              configurable: true,
+              enumerable: true
+            };
+            
+            // Try to delete first to handle cases where it's already defined on the instance
+            try { delete window.fetch; } catch(e) {}
+            
+            Object.defineProperty(window, 'fetch', props);
+          } catch (e) {
+            // If defining on window fails, try the prototype
+            try {
+              Object.defineProperty(Window.prototype, 'fetch', {
+                get: function() { return window.fetch; },
+                set: function(v) { 
+                  // This is a bit circular but might help if the instance is restricted
+                },
+                configurable: true,
+                enumerable: true
+              });
+            } catch (e2) {}
+          }
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
